@@ -16,6 +16,17 @@ body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMac
 .comparison .source-link { min-height: 28px; padding: 3px 7px; margin: -3px -7px; border-color: transparent; color: var(--accent); background: transparent; }
 .comparison :is(.comparison-control, .source-link):hover:not(:disabled) { background: var(--hover); border-color: var(--line); }
 .comparison .comparison-control:disabled { opacity: .55; cursor: wait; }
+.comparison .comparison-control:disabled { cursor: default; }
+.comparison .view-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: -6px 0 16px; }
+.comparison .filter-control { display: flex; align-items: center; gap: 6px; flex: 1 1 170px; min-width: 0; }
+.comparison .filter-control input { width: 100%; min-width: 0; height: 30px; padding: 5px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; font-size: 12px; }
+.comparison .filter-control input::placeholder { color: var(--muted); opacity: 1; }
+.comparison input:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.comparison .sort-header { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 3px 4px; margin: -3px -4px; border: 0; border-radius: 4px; background: transparent; color: inherit; font: inherit; text-align: inherit; cursor: pointer; }
+.comparison .sort-header:hover { background: var(--hover); color: var(--ink); }
+.comparison .sort-active { color: var(--accent); }
+.comparison .sort-direction { flex-shrink: 0; }
+.comparison .filter-empty { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 20px 0 4px; }
 .comparison :is(button, a, summary, .table-wrap):focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
 .comparison .table-wrap { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; border: 1px solid var(--line); border-radius: 10px; scrollbar-width: thin; scrollbar-color: var(--muted) var(--surface); }
 .comparison table { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 13px; line-height: 1.55; }
