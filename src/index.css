@@ -69,3 +69,9 @@ body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMac
 .comparison .view-select select { max-width: 100%; min-width: 0; min-height: 30px; padding: 4px 24px 4px 8px; border: 1px solid var(--line); border-radius: 8px; background-color: var(--surface); color: var(--ink); font: inherit; cursor: pointer; }
 .comparison select:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
 .comparison .transposed .product-heading { color: var(--ink); font-size: 13px; font-weight: 600; }
+.comparison .cell-preview-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.comparison .value-trigger { display: inline-block; margin-top: 4px; padding: 1px 0; border: 0; border-radius: 3px; background: transparent; color: var(--accent); font: inherit; font-size: 11px; cursor: pointer; }
+.comparison .value-trigger:hover { text-decoration: underline; }
+.comparison .value-popover { position: fixed; inset: 0; margin: auto; box-sizing: border-box; width: min(360px, calc(100% - 32px)); height: fit-content; max-height: calc(100dvh - 32px); padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); box-shadow: 0 8px 32px #0003; overflow: auto; text-align: left; white-space: normal; }
+.comparison .value-popover .comparison-control { display: flex; margin-left: auto; margin-bottom: 12px; }
+.comparison .value-popover .full-value { color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; font-size: 13px; }

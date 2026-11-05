@@ -16,6 +16,16 @@ const desc: ViewSort = { ...asc, direction: "descending" };
 const ids = (data: Comparison, query = "", sort: ViewSort | null = null) => selectVisibleItems(data, query, sort).map((item) => item.id);
 
 describe("local comparison view preferences", () => {
+  it("filters and sorts full long values, including text beyond a cell preview", () => {
+    const prefix = "A detailed fictional description that is much longer than two table lines. ".repeat(5);
+    const data = structuredClone(comparison);
+    data.items[0].values.use = prefix + "Zebra ending hidden beyond the preview";
+    data.items[2].values.use = prefix + "Alpine ending hidden beyond the preview";
+    const before = structuredClone(data);
+    expect(ids(data, "Zebra ending")).toEqual(["high"]);
+    expect(ids(data, "", { column: { kind: "attribute", id: "use" }, direction: "ascending" })).toEqual(["low", "high", "missing"]);
+    expect(data).toEqual(before);
+  });
   it("chooses Auto from full dimensions, including ties, and recalculates after edits", () => {
     const players = (count: number, stats: number): Comparison => ({ ...comparison,
       items: Array.from({ length: count }, (_, i) => ({ ...comparison.items[i % 3], id: String(i) })),

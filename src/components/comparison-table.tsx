@@ -5,6 +5,7 @@ import { ArrowUpRight, Maximize2, Minimize2 } from "lucide-react";
 import { useCallTool, useToolInfo } from "../helpers.js";
 import type { StoredComparison } from "../comparison-store.js";
 import { readComparisonResult } from "../comparison-result.js";
+import { CellValue } from "./cell-value.js";
 import { itemsAsColumns, type LayoutPreference, availableSort, sameColumn, selectVisibleItems, type SortColumn, type ViewSort } from "../comparison-view.js";
 
 function traceWidget(event: string, details: Record<string, unknown>) {
@@ -158,7 +159,7 @@ function LiveComparison({ initial, widgetId }: { initial: StoredComparison; widg
             <caption>Items are columns, attributes are rows. Sort items using the Sort items control. A dash means no value was supplied.</caption>
             <colgroup><col style={{ width: 190 }} />{visibleItems.map((item) => <col key={item.id} />)}</colgroup>
             <thead><tr><th scope="col" className="item-name">Attribute</th>{visibleItems.map((item) => <th scope="col" className="product-heading" key={item.id}>{item.name}</th>)}</tr></thead>
-            <tbody>{comparison.attributes.map((a) => <tr key={a.id}><th scope="row" className="item-name">{a.label}</th>{visibleItems.map((item) => <td key={item.id} className={numericColumns.has(a.id) ? "numeric" : undefined}>{item.values[a.id]?.trim() ? <span className={isAmount(item.values[a.id]) ? "amount" : undefined}>{item.values[a.id]}</span> : <span className="missing" aria-label="Not provided">—</span>}</td>)}</tr>)}
+            <tbody>{comparison.attributes.map((a) => <tr key={a.id}><th scope="row" className="item-name">{a.label}</th>{visibleItems.map((item) => <td key={item.id} className={numericColumns.has(a.id) ? "numeric" : undefined}><CellValue value={item.values[a.id]} amount={!!item.values[a.id] && isAmount(item.values[a.id])} layout={transposed} /></td>)}</tr>)}
               <tr><th scope="row" className="item-name">Sources</th>{visibleItems.map((item) => <td className="sources" key={item.id}>{item.sources.length ? <ul>{item.sources.map((source, i) => <li key={i}><a className="source-link" href={source.url} target="_blank" rel="noopener noreferrer" title={source.label} aria-label={`View source: ${source.label} for ${item.name}`}>View source<ArrowUpRight size={13} aria-hidden="true" /></a></li>)}</ul> : <span className="missing" aria-label="No sources provided">—</span>}</td>)}</tr>
             </tbody>
           </table> : <table style={{ minWidth: `${190 + comparison.attributes.length * 116 + 132}px` }}>
@@ -167,7 +168,7 @@ function LiveComparison({ initial, widgetId }: { initial: StoredComparison; widg
             <thead><tr><th scope="col" className="item-name" aria-sort={activeSort?.column.kind === "name" ? activeSort.direction : undefined}>{sortHeader({ kind: "name" }, "Item")}</th>{comparison.attributes.map((a) => <th scope="col" className={numericColumns.has(a.id) ? "numeric" : undefined} key={a.id} aria-sort={activeSort?.column.kind === "attribute" && activeSort.column.id === a.id ? activeSort.direction : undefined}>{sortHeader({ kind: "attribute", id: a.id }, a.label)}</th>)}<th scope="col">Sources</th></tr></thead>
             <tbody>{visibleItems.map((item) => <tr key={item.id}>
               <th scope="row" className="item-name">{item.name}</th>
-              {comparison.attributes.map((a) => <td key={a.id} className={numericColumns.has(a.id) ? "numeric" : undefined}>{item.values[a.id]?.trim() ? <span className={isAmount(item.values[a.id]) ? "amount" : undefined}>{item.values[a.id]}</span> : <span className="missing" aria-label="Not provided">—</span>}</td>)}
+              {comparison.attributes.map((a) => <td key={a.id} className={numericColumns.has(a.id) ? "numeric" : undefined}><CellValue value={item.values[a.id]} amount={!!item.values[a.id] && isAmount(item.values[a.id])} layout={transposed} /></td>)}
               <td className="sources">{item.sources.length ? <ul>{item.sources.map((source, i) => <li key={i}><a className="source-link" href={source.url} target="_blank" rel="noopener noreferrer" title={source.label} aria-label={`View source: ${source.label} for ${item.name}`}>View source<ArrowUpRight size={13} aria-hidden="true" /></a></li>)}</ul> : <span className="missing" aria-label="No sources provided">—</span>}</td>
             </tr>)}</tbody>
           </table>}
