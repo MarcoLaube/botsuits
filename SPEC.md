@@ -1,0 +1,28 @@
+# Generic comparison app
+
+Users supply title, attributes, items and optional HTTP(S) sources through chat tools. New comparisons start empty. Demo data requires an explicit Load example action. No additional AI API client.
+
+## Tools and identity
+- show-comparison: without comparisonId, create a record from optional initial comparison or explicit loadExample; otherwise open that ID without changing it. Every create gets a random UUID.
+- get-comparison: read latest comparisonId, revision and comparison without a view. Used by mounted widgets and by chat to refresh stale revisions.
+- edit-comparison: requires comparisonId, expectedRevision, edit. Validate against server state, update only that ID, increment revision. Actions: replace, rename, add, update, remove, attributes, load-example. Reject conflicts and unknown IDs; never silently create replacements.
+- Advice questions cause no edits. Reuse the current conversation's ID; no global last comparison.
+
+## Mounted view synchronization
+The read tool explicitly advertises `openai/widgetAccessible: true`, allowing the existing Skybridge `useCallTool` refresh through ChatGPT's host bridge. It remains a data-only tool, visible to chat for revision recovery. Creation and mutation bindings are unchanged. This follows the OpenMCP runtime's widget-callable-tool metadata; no second refresh transport is added.
+
+Verified 2026-11-05 in actual ChatGPT web side viewer: same widget instance and comparison ID displayed three rows/revision 1, then two rows/revision 2 after a chat remove, with no second widget. Advice returned in chat without another mutation or revision change. Host action was Open app in tab; a separate native Work Pin action remains a manual verification boundary. See OPENMCP-INVESTIGATION.md for the source trace, runtime IDs and test procedure.
+Each view initially reads its tool output, then polls get-comparison through useCallTool every two seconds. Polls do not create widgets. Apply newer revisions only, prevent overlapping polls, ignore results after unmount, back off errors to 30 seconds, show stale-data warnings. Host suspension can delay updates. Do not assume later tool output refreshes a pinned view. Skybridge Events target chat workflows, not arbitrary record-change notifications to mounted components.
+
+## Storage and limitations
+A ComparisonStore in Skybridge setup holds a bounded map of separate records in the process, not one global mutable comparison. Read copies, validate edits atomically. Expire records 24 hours after creation/last edit; polls do not renew expiry. Maximum 500 records; reject creation when full after expired-record cleanup. Lost on server restart/hot reload, no database, no multi-replica synchronization. UUIDs are bearer capabilities; no authenticated ownership or cross-conversation discovery. Legacy snapshot widgets need reopening under the new ID contract.
+
+## UI and deployment
+Accessible React table, light/dark theme, empty state with Load example, sources, fullscreen, revision/sync status. Only show-comparison has a view; mutations and reads return data only to avoid opening another widget. Preserve dependencies, Docker, Alpic and Vite deployment configuration. Never push.
+
+## Verification
+Build, both type checks, deterministic edits, independent MCP clients reading the same ID and distinct IDs, revision conflicts, expiry/capacity, and a mounted widget updated by an external MCP edit without reopening.
+
+Temporary development diagnostics log widget instance, displayed ID/revision, every refresh/error, mutation request and server before/after state, process/store IDs. Small indicator is development-only. Initial UI waits for validated result, reports explicit/invalid/timeout errors, and never initializes state on mount. Existing polling is unchanged; no additional sync mechanism. Actual ChatGPT reproduction must be distinguished from local verification.
+
+Initial-render priority (2026-11-05): actual ChatGPT creation verified with all three fictional sample rows at revision 1 through BotSuits_Local's configured Alpic endpoint. Initial data remains visible despite a later `ProtocolError: Unknown tool` refresh error. No application-code change was justified by this reproduction; pinned synchronization remains paused. Verification used the host's existing CSP-off setting, so CSP-enforced rendering is not established. See README for endpoint, trace and conversation evidence.

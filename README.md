@@ -1,71 +1,102 @@
-# Apps SDK Template
+# Comparison app
 
-A minimal TypeScript template for building ChatGPT and MCP Apps with widget rendering.
+Latest pinning/synchronization investigation: [OpenMCP source trace and ChatGPT verification](OPENMCP-INVESTIGATION.md). The existing polling read now advertises `openai/widgetAccessible: true`. After restarting the dev server and refreshing connector tools, the same ChatGPT side-view widget advanced from three rows/revision 1 to two rows/revision 2 after a chat edit, without opening another widget; advice left revision 2 unchanged. The test used **Open app in tab** in ChatGPT web, with the existing CSP-off setting; a separate native Work Pin action remains unverified. The active tunnel in that test targeted port **3000**, so use the actual printed port instead of assuming the historical 3001 below.
 
-**This template has been generated and is powered by [Skybridge](https://github.com/alpic-ai/skybridge).**
+A generic React comparison table built on the existing Skybridge MCP setup. ChatGPT supplies the title, attributes, items and optional source links through tools. There are no additional AI API calls, credentials or external backend fetches. New comparisons start empty, with no items or attributes. Fictional travel-bag data loads only after an explicit request.
 
-## Getting Started
+## Develop and check
 
-### Prerequisites
-
-- Node.js 24+
-- HTTP tunnel such as [ngrok](https://ngrok.com/download)
-
-### Local Development
-
-#### 1. Install
+Requires Node.js 24+.
 
 ```bash
-git clone git@github.com:alpic-ai/apps-sdk-template.git
-cd apps-sdk-template
 npm install
-```
-
-#### 2. Start your local server
-
-Run the development server from the root directory:
-
-```bash
 npm run dev
 ```
 
-Open DevTools to test your app locally: http://localhost:3000/
-MCP server running at:  http://localhost:3000/mcp
+Use the port printed by Skybridge. In the current session it is **3001**: DevTools at http://localhost:3001/ and MCP at http://localhost:3001/mcp. Point the tunnel at that same port. Reload the connector after changing tool definitions.
 
-#### 3. Connect to ChatGPT
-
-- ChatGPT requires connectors to be publicly accessible. To expose your server on the Internet, run:
 ```bash
-ngrok http 3000
+npm run build
+npx tsc --noEmit
+npm run evals:types
+npm run evals
 ```
-- In ChatGPT, navigate to **Settings → Connectors → Create** and add the forwarding URL provided by ngrok suffixed with `/mcp` (e.g. `https://3785c5ddc4b6.ngrok-free.app/mcp`)
 
-### Create your first widget
+The eval suite runs deterministic local state tests, with no model requests or API keys.
 
-#### 1. Add a new widget
+## Chat workflow
 
-- Register a widget in `server/server.ts` with a unique name (e.g., `my-widget`)
-- Create a matching React component at `web/src/widgets/my-widget.tsx`. The file name must match the widget name exactly
+- "Show a comparison" opens an empty comparison.
+- Click **Load example** in the empty view, or ask "Load example" in chat, to load the fictional travel-bag sample. The button sends an explicit request through the host conversation; the resulting tool call updates that same comparison ID.
+- "Compare these three options by price, size and warranty" supplies a new title, attributes and items.
+- "Add this option", "Change its weight", "Remove the duffel", or "Compare capacity and materials instead" updates the comparison.
+- "Which is best for short trips?" should receive advice without changing the table.
 
-#### 2. Edit widgets with Hot Module Replacement (HMR)
+`show-comparison` creates a new record when no `comparisonId` is supplied: empty by default, initialized from optional `comparison` data, or populated with fictional sample data only for an explicit `loadExample: true` request. Every new record has a random UUID and starts at revision 1. To open an existing comparison, pass only its `comparisonId`; opening never replaces its contents.
 
-Edit and save components in `web/src/widgets/` — changes appear instantly in the host
+`get-comparison` is a read-only tool without a view. It returns the latest `{ comparisonId, revision, comparison }` and is used by mounted widgets for polling. `edit-comparison` requires `comparisonId`, `expectedRevision` and an `edit` action: `replace`, `rename`, `add`, `update`, `remove`, `attributes`, or explicit `load-example`. All edits preserve the comparison ID and increment its revision. Stale revisions fail without changing data; read again before retrying the user's intended edit. To start an independent comparison, call `show-comparison` without an ID. Never substitute another conversation's ID.
 
-#### 3. Edit server code
+Attributes have stable `{ id, label }` values. Items have `{ id, name, values, sources }`; `values` maps attribute IDs to strings, and optional `sources` contains `{ label, url }` HTTP(S) references. Updates merge supplied values, retain omitted fields, and replace a supplied source list (`[]` clears it). Replacing attributes preserves matching IDs and removes obsolete values; new values display as missing until supplied. Duplicate IDs, unknown item IDs and unknown attribute keys are rejected. Failed edits leave the snapshot unchanged.
 
-Modify files in `server/` and reload your ChatGPT connector in **Settings → Connectors → [Your connector] → Reload**
+Tool descriptions explicitly restrict edits to requested changes. Ordinary advice requires no edit tool. These descriptions guide ChatGPT; the server receives structured arguments and cannot prove what the user intended. No app-side classifier or additional AI call is made. Source URLs are validated for protocol, but the app does not verify their factual contents.
 
-## Deploy to Production
+## State and persistence
 
-Use [Alpic](https://alpic.ai/) to deploy your OpenAI App to production
+Previously, each tool call produced an independent JSON snapshot, with no comparison ID or server record. The React table read only its own `useToolInfo()` output. Returning a later `structuredContent` result could not refresh an earlier pinned widget.
 
-[![Deploy on Alpic](https://assets.alpic.ai/button.svg)](https://app.alpic.ai/new/clone?repositoryUrl=https%3A%2F%2Fgithub.com%2Falpic-ai%2Fapps-sdk-template)
+Now the app's Skybridge `setup` creates one in-memory `ComparisonStore` for the app process. Its map holds separate records keyed by random UUIDs. This is not a single mutable current comparison: no default/global last ID exists, and each create gets a new ID. Reads return copies; edits validate and atomically replace only the selected record. The assistant carries the ID and revision in conversation tool results, not a mutable client snapshot used as the source of truth.
 
-- In ChatGPT, navigate to **Settings → Connectors → Create** and add your MCP server URL (e.g., `https://your-app-name.alpic.live`)
+A mounted React widget uses its initial result to identify its record, then calls `get-comparison` through Skybridge's supported `useCallTool` API immediately and every two seconds after a successful response. The installed Skybridge 2.1 host context hooks do not broadcast arbitrary subsequent chat tool results to earlier widgets. Its experimental Events API is for chat workflows, not record-change delivery to a mounted React view. Polling therefore supplies current data independently of new widget creation. Responses with older revisions are ignored; only one poll is in flight, timers are cleaned up on unmount, and failed reads retain the last result with a visible warning and back off up to 30 seconds. Hosts can suspend/throttle background or pinned widgets; synchronization resumes when execution resumes. Only an explicit show-comparison call opens a view. Mutation results do not open another widget. Running widgets with the same ID retrieve the same record.
 
-## Resources
+Storage is temporary, not durable: records expire 24 hours after creation or the latest successful edit (polls do not extend expiry), with a maximum of 500 records per process. A restart, dev hot reload or deployment loses records. Missing/expired IDs fail explicitly and are never silently recreated from stale widget output. Old widgets created before ID support must be recreated once. Multiple workers/replicas have separate stores; reliable multi-instance production deployment needs a shared database/store. No changes to deployment configuration were made.
 
-- [Skybridge Documentation](https://docs.skybridge.tech)
-- [Apps SDK Documentation](https://developers.openai.com/apps-sdk)
-- [Model Context Protocol Documentation](https://modelcontextprotocol.io/)
-- [Alpic Documentation](https://docs.alpic.ai/)
+IDs are bearer capabilities: anyone with an ID can read or edit that record; there is no account ownership enforcement. Independent comparisons are isolated by distinct unguessable IDs, not authenticated per-conversation access controls. There is no listing tool or automatic cross-conversation selection. Keep IDs within their intended conversation. Revision checks prevent stale edits from overwriting more recent changes. Content limits: 30 items, 12 attributes, 10 sources per item.
+
+## Deployment
+
+The existing `Dockerfile`, `alpic.json`, Vite configuration, app identity, view domain and start/deploy commands are preserved. Deploy through the existing Alpic workflow:
+
+```bash
+npm run deploy
+```
+
+No deployment was performed as part of this replacement.
+
+Only `show-comparison` advertises a view (`comparison`). `edit-comparison` and `get-comparison` return data only, without a UI resource binding or `viewUUID`, so mutations no longer open a second widget. The previous edit view source remains for compatibility with already served code; it is no longer advertised as a resource. Refresh the ChatGPT connector after this metadata change.
+## Blank widget through ngrok
+
+A working MCP connection does not prove that browser assets can load. The current free ngrok tunnel returns its browser-warning page for cross-origin JavaScript requests, even though MCP POST requests succeed. During diagnosis, `/_skybridge/view/comparison`, `/assets/@react-refresh`, `/@vite/client`, and `/assets/src/views/comparison.tsx` returned the warning as `text/html` without CORS for a browser-like request. The same requests with `ngrok-skip-browser-warning: true` returned `text/javascript` and `Access-Control-Allow-Origin: *`. Browser module imports cannot add that custom header, so adding it to the MCP request alone does not fix rendering. Changing the React table or relaxing CSP does not fix this response substitution.
+
+Use a public tunnel that serves the actual JavaScript without a browser interstitial. The existing Alpic tooling supports this, after logging in:
+
+```bash
+npx alpic tunnel --port 3001
+```
+
+Use the public URL printed by the command, suffixed with `/mcp`, in the ChatGPT connector. Alternatively, use an ngrok setup with the browser interstitial removed. Verify public asset responses from a fresh browser context; accepting the warning in one browser session is not a reliable fix for ChatGPT's sandbox. Keep the local Skybridge server running on port 3001. The Alpic tunnel requires account login. After login, it was activated and all four public asset paths above returned HTTP 200 with `text/javascript` and `Access-Control-Allow-Origin: *`, without bypass headers.
+
+In Skybridge DevTools, run `show-comparison` with JSON input `{}` for an empty comparison, or `{ "loadExample": true }` for the three-row sample. MCP advertises distinct `ui.resourceUri` bindings for `comparison` and `edit-comparison`; resource reads return `text/html;profile=mcp-app`; tool results contain the expected `structuredContent.comparison`. With tunnel forwarded headers, resource HTML and CSP use the public HTTPS/WSS origin, not localhost. The checked ChatGPT view was blank, while the local view rendered correctly. End-to-end ChatGPT rendering through the Alpic tunnel still needs verification after updating the connector URL and making a fresh tool call.
+
+## Mounted-widget verification
+
+Verified in Skybridge DevTools at port 3001: opened one sample comparison at revision 1 with three rows, then left its widget mounted. A separate HTTP MCP `edit-comparison` call removed `weekender` using the same comparison ID and expected revision 1. Without reloading, reopening, or running the view again, the same iframe showed two rows and revision 2; its original tool-output panel remained unchanged. An independently created comparison retained its own revision 1 and contents. This verifies synchronization in the local host interface; ChatGPT's actual pin/suspension behavior was not exercised in this test. The prior production build, both type checks and seven tests passed; this retry changed documentation only.
+
+## Temporary development trace
+
+No new synchronization mechanism was added for this diagnosis. Development builds show a small indicator with the widget instance UUID, comparison ID, displayed revision and last received refresh/error time. Browser console entries prefixed `[comparison-widget]` record `host-output`, `mount-polling`, `display`, `refresh-start`, `refresh-received`, `refresh-error`, `unmount-polling`, and initial-loading timeouts. Each refresh includes the requested and returned IDs, server revision/item count and any error. A development-only `debugWidgetId` on get-comparison correlates the browser instance with server reads.
+
+Server `[comparison-trace]` entries record process/store IDs, creation/open requests, mutation-received ID, revision/item count before and after mutation, and refresh responses/errors. In development the same server entries are saved to ignored `.skybridge/comparison-trace.jsonl` (bounded to roughly 2 MiB, then reset). Production does not log these diagnostics or display the indicator. Comparison IDs grant access to their records; keep development logs private. Remove these temporary diagnostics after tracing.
+
+Reproduce with a freshly refreshed ChatGPT connector: create one comparison, note its indicator, pin it, then request removal of one item. Compare the pinned indicator's ID with `mutation-request`, then `mutation-before`/`mutation-after`, then `refresh-response` for that widget UUID, then browser `refresh-received`/`display`. A different mutation ID means chat targeted a different record. A correct mutation with no later refresh-start/refresh-response means the pinned widget is not executing its poll or cannot reach the tool. Server refresh-response without browser receipt indicates a host/transport problem; browser receipt of a newer revision without display narrows it to rendering. Process/store changes or not-found errors point to temporary storage loss or routing to a different worker. Do not infer a ChatGPT fix from local DevTools polling alone.
+
+The widget waits on “Loading comparison…” until a schema-valid ID, positive revision and comparison arrive; metadata alone does not render a table. Explicit tool errors are displayed, invalid results are rejected, and no valid result within 30 seconds produces an error. A valid intentionally empty comparison still displays its normal empty state. Widget mount only reads get-comparison: it never creates or overwrites server data. An earlier empty display during thinking could also be a real show-comparison creation with no initial data; show-request/host-output traces distinguish that case from the host's partial loading payload.
+
+Diagnostic code checks: production build, both TypeScript checks, eight tests and diff whitespace checks passed. Live HTTP MCP diagnostic (not ChatGPT) kept ID `6eece3b8-0505-4d74-b63b-98b408dd62b6` through remove: revision 1 / 3 items -> revision 2 / 2 items. Mutation response metadata was absent; a read returned revision 2. The exact refreshed-connector create/pin/remove ChatGPT reproduction has not yet completed, so these facts do not establish the pinned-host failure's final cause.
+
+## Initial-render retry (2026-11-05)
+
+Verified actual ChatGPT rendering in a fresh conversation using **BotSuits_Local** (app ID `asdk_app_6aea8b8ed9648191bf0977183c30778f`), configured at `https://silent-doors-cough-594.alpic.dev/mcp`. A new `show-comparison` call with `{ "loadExample": true }` created comparison `f112a1e6-1b17-44d5-8adf-c9cba2514664`, revision 1, with three items (server trace at `2026-11-05T21:14:43.438Z`). The actual ChatGPT iframe displayed Everyday Daypack, Weekend Duffel and Compact Carry-on. Conversation: https://chatgpt.com/c/6aecf1a6-59ec-83eb-94e2-5f4f70a16cf4.
+
+The configured endpoint advertised the creation resource `ui://views/ext-apps/comparison.html`; reads and mutations had no view bindings. Resource HTML used the public HTTPS origin, and the entry module, React refresh, Vite client and comparison component all returned JavaScript successfully. No application-code fix was justified: initial rendering did not fail in this reproduction. The first observed failure was the subsequent widget refresh, which displayed `ProtocolError: Unknown tool`; the populated table remained visible with its initial revision 1 data. CSP was already disabled in this ChatGPT test (the UI showed `CSP off`); this verifies that host configuration only, not CSP-enforced rendering. Pinned synchronization remains unaddressed.
+
+Production build succeeded outside the filesystem sandbox; the sandbox attempt compiled assets but reported access errors during deployment-output generation. Both TypeScript checks and all eight deterministic tests passed. No application code, dependency or deployment configuration changed in this retry. The repository's committed baseline is the onboarding template, so it cannot establish the last working uncommitted comparison version.

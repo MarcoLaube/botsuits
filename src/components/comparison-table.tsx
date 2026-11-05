@@ -1,0 +1,129 @@
+import "@/index.css";
+import { useDisplayMode, useSendFollowUpMessage, useUser } from "skybridge/web";
+import { useEffect, useState } from "react";
+import { useCallTool, useToolInfo } from "../helpers.js";
+import type { StoredComparison } from "../comparison-store.js";
+import { readComparisonResult } from "../comparison-result.js";
+
+function traceWidget(event: string, details: Record<string, unknown>) {
+  if (import.meta.env.DEV) console.info("[comparison-widget]", JSON.stringify({ time: new Date().toISOString(), event, ...details }));
+}
+
+function DevIndicator({ widgetId, comparisonId, revision, detail }: { widgetId: string; comparisonId?: string; revision?: number; detail: string }) {
+  if (!import.meta.env.DEV) return null;
+  return <small style={{ display: "block", font: "11px monospace", overflowWrap: "anywhere", padding: "4px 0" }}>
+    DEV widget {widgetId} | comparison {comparisonId ?? "pending"} | revision {revision ?? "pending"} | {detail}
+  </small>;
+}
+
+export default function ComparisonView() {
+  const { output, input, isPending } = useToolInfo<"show-comparison">();
+  const [widgetId] = useState(() => crypto.randomUUID());
+  const [loadingTimedOut, setLoadingTimedOut] = useState(false);
+  const result = readComparisonResult(output);
+  useEffect(() => {
+    traceWidget("host-output", { widgetId, isPending, status: result.status, inputComparisonId: input?.comparisonId, comparisonId: output?.comparisonId, revision: output?.revision, itemCount: output?.comparison?.items?.length });
+  }, [widgetId, input, output, isPending, result.status]);
+  useEffect(() => {
+    if (result.status !== "loading") { setLoadingTimedOut(false); return; }
+    const timer = setTimeout(() => {
+      traceWidget("initial-load-timeout", { widgetId });
+      setLoadingTimedOut(true);
+    }, 30000);
+    return () => clearTimeout(timer);
+  }, [widgetId, result.status]);
+  if (result.status !== "ready") return <div>
+    <DevIndicator widgetId={widgetId} comparisonId={input?.comparisonId} detail={result.status} />
+    {result.status === "error" ? <p role="alert">Could not load comparison: {result.error}</p>
+      : loadingTimedOut ? <p role="alert">Loading comparison failed: no valid data arrived within 30 seconds. Ask in chat to reopen it.</p>
+      : <p role="status">Loading comparison…</p>}
+  </div>;
+  return <LiveComparison key={result.value.comparisonId} widgetId={widgetId} initial={result.value} />;
+}
+
+function LiveComparison({ initial, widgetId }: { initial: StoredComparison; widgetId: string }) {
+  const [latest, setLatest] = useState(initial);
+  const [syncError, setSyncError] = useState(false);
+  const [refreshInfo, setRefreshInfo] = useState("waiting for first refresh");
+  const { callToolAsync } = useCallTool("get-comparison");
+  useEffect(() => {
+    setLatest((previous) => initial.revision > previous.revision ? initial : previous);
+  }, [initial]);
+  useEffect(() => {
+    traceWidget("display", { widgetId, comparisonId: latest.comparisonId, revision: latest.revision, itemCount: latest.comparison.items.length });
+  }, [widgetId, latest]);
+  useEffect(() => {
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    let delay = 2000;
+    async function refresh() {
+      traceWidget("refresh-start", { widgetId, comparisonId: initial.comparisonId });
+      try {
+        const result = await callToolAsync({ comparisonId: initial.comparisonId, ...(import.meta.env.DEV ? { debugWidgetId: widgetId } : {}) });
+        const parsed = readComparisonResult(result.structuredContent);
+        traceWidget("refresh-received", { widgetId, requestedComparisonId: initial.comparisonId, comparisonId: result.structuredContent?.comparisonId, revision: result.structuredContent?.revision, itemCount: result.structuredContent?.comparison?.items?.length, status: parsed.status, error: parsed.status === "error" ? parsed.error : undefined, stopped });
+        if (parsed.status !== "ready") throw new Error(parsed.status === "error" ? parsed.error : "Refresh returned no valid comparison");
+        const value = parsed.value;
+        if (value.comparisonId !== initial.comparisonId) throw new Error(`Refresh returned a different comparison ID: ${value.comparisonId}`);
+        if (stopped) return;
+        setLatest((previous) => value.revision > previous.revision ? value as StoredComparison : previous);
+        setSyncError(false);
+        setRefreshInfo(`received revision ${value.revision} at ${new Date().toISOString()}`);
+        delay = 2000;
+      } catch (error) {
+        traceWidget("refresh-error", { widgetId, comparisonId: initial.comparisonId, error: String(error), stopped });
+        if (!stopped) { setSyncError(true); setRefreshInfo(`error at ${new Date().toISOString()}: ${String(error)}`); }
+        delay = Math.min(delay * 2, 30000);
+      } finally {
+        if (!stopped) timer = setTimeout(() => { void refresh(); }, delay);
+      }
+    }
+    void refresh();
+    traceWidget("mount-polling", { widgetId, comparisonId: initial.comparisonId });
+    return () => { stopped = true; clearTimeout(timer); traceWidget("unmount-polling", { widgetId, comparisonId: initial.comparisonId }); };
+  }, [initial.comparisonId, callToolAsync, widgetId]);
+  const { theme } = useUser();
+  const [mode, setMode] = useDisplayMode();
+  const sendMessage = useSendFollowUpMessage();
+  const [exampleError, setExampleError] = useState(false);
+  const [loadingExample, setLoadingExample] = useState(false);
+  async function loadExample() {
+    setExampleError(false);
+    setLoadingExample(true);
+    try {
+      await sendMessage(`Load example into comparison ${latest.comparisonId}: call edit-comparison with this same comparisonId, expectedRevision=${latest.revision}, and edit={"action":"load-example"}. If the revision changed, read get-comparison first. This is an explicit request for demo data.`);
+    } catch {
+      setExampleError(true);
+    } finally {
+      setLoadingExample(false);
+    }
+  }
+  const comparison = latest.comparison;
+  return (
+    <section className={`comparison ${theme === "dark" ? "dark" : ""} ${mode === "fullscreen" ? "expanded" : ""}`} aria-label={comparison.title}>
+      <DevIndicator widgetId={widgetId} comparisonId={latest.comparisonId} revision={latest.revision} detail={refreshInfo} />
+      <header>
+        <div><p className="eyebrow">COMPARE AT A GLANCE</p><h1>{comparison.title}</h1><p>{comparison.items.length} items · {comparison.attributes.length} attributes</p></div>
+        <button onClick={() => { void setMode(mode === "fullscreen" ? "inline" : "fullscreen").catch(() => {}); }}>{mode === "fullscreen" ? "Collapse" : "Expand"}</button>
+      </header>
+      {comparison.items.length === 0 ? <div className="empty">
+        <p>No items yet. Describe what you want to compare in chat.</p>
+        {comparison.attributes.length === 0 && <button disabled={loadingExample} onClick={() => { void loadExample(); }}>{loadingExample ? "Requesting example..." : "Load example"}</button>}
+        {exampleError && <p role="alert">Could not send the request. Ask in chat to load an example.</p>}
+      </div> : (
+        <div className="table-wrap">
+          <table>
+            <caption>Compare items by attribute. A dash means no value was supplied.</caption>
+            <thead><tr><th scope="col">Item</th>{comparison.attributes.map((a) => <th scope="col" key={a.id}>{a.label}</th>)}<th scope="col">Sources</th></tr></thead>
+            <tbody>{comparison.items.map((item) => <tr key={item.id}>
+              <th scope="row">{item.name}</th>
+              {comparison.attributes.map((a) => <td key={a.id}>{item.values[a.id] || <span aria-label="Not provided">—</span>}</td>)}
+              <td>{item.sources.length ? <ul>{item.sources.map((source, i) => <li key={i}><a href={source.url} target="_blank" rel="noopener noreferrer">{source.label}</a></li>)}</ul> : <span aria-label="No sources provided">—</span>}</td>
+            </tr>)}</tbody>
+          </table>
+        </div>
+      )}
+      <footer><p role="status">{syncError ? "Updates unavailable. Showing the last received version; retrying automatically. The comparison may have expired or the server restarted." : `Live comparison · revision ${latest.revision}`}</p><p>Ask in chat to add, update or remove an item, rename the comparison, or change its attributes. Advice questions leave the table unchanged.</p><p>Changes sync while this widget is running. Storage is temporary and lost on server restart. Sample values are fictional; source links are supplied references, not verified by this app.</p></footer>
+    </section>
+  );
+}
