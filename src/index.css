@@ -2,22 +2,55 @@
 @import "@alpic-ai/ui/theme";
 @source "../node_modules/@alpic-ai/ui/src";
 
-body { margin: 0; font-family: system-ui, sans-serif; }
-.comparison { --surface: #fff; --ink: #20252b; --muted: #5b6572; --line: #dce2e8; --tint: #f4f7f9; background: var(--surface); color: var(--ink); padding: 24px; border: 1px solid var(--line); border-radius: 16px; }
-.comparison.dark { --surface: #181b20; --ink: #f1f3f5; --muted: #b0bbc7; --line: #39424c; --tint: #222830; }
-header { display: flex; justify-content: space-between; align-items: start; gap: 16px; margin-bottom: 24px; }
-h1 { font-size: 24px; line-height: 1.25; font-weight: 650; overflow-wrap: anywhere; }
-p { margin: 8px 0; color: var(--muted); font-size: 14px; }
-.eyebrow { font-size: 11px; letter-spacing: .12em; font-weight: 700; }
-button { border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; cursor: pointer; }
-button:focus-visible, a:focus-visible { outline: 2px solid #467de3; outline-offset: 3px; }
-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 14px; }
-caption { text-align: left; font-size: 12px; color: var(--muted); padding-bottom: 12px; }
-th, td { text-align: left; vertical-align: top; padding: 14px 10px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; white-space: pre-wrap; }
-thead { background: var(--tint); } th { font-weight: 650; }
-a { color: #2566c4; text-decoration: underline; } .dark a { color: #91bbff; }
-ul { list-style: none; padding: 0; margin: 0; } li + li { margin-top: 8px; }
-footer { margin-top: 20px; } footer p:last-child { font-size: 12px; }
-.empty { padding: 24px 0; }
-.expanded { padding-bottom: 100px; } .expanded .table-wrap { overflow-x: auto; } .expanded table { min-width: 700px; }
-@media (max-width: 600px) { .comparison { padding: 12px; } th, td { padding: 10px 4px; font-size: 12px; } h1 { font-size: 20px; } }
+body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.comparison { --surface: #fff; --ink: #252628; --muted: #6b6d72; --line: #e8e8eb; --tint: #f7f7f8; --hover: #f2f2f4; --accent: #235da8; --focus: #3576ca; --error: #a83d35; container-type: inline-size; box-sizing: border-box; width: 100%; min-width: 0; padding: 24px; background: var(--surface); color: var(--ink); font-size: 13px; line-height: 1.55; }
+.comparison.dark { color-scheme: dark; --surface: #212121; --ink: #ededf0; --muted: #adaeb5; --line: #39393c; --tint: #29292c; --hover: #333337; --accent: #a6c9ff; --focus: #a6c9ff; --error: #ffa79c; }
+.comparison header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin: 0 0 24px; }
+.comparison-heading { min-width: 0; }
+.comparison h1 { margin: 0; color: var(--ink); font-size: 19px; font-weight: 600; letter-spacing: -.025em; line-height: 1.35; overflow-wrap: anywhere; }
+.comparison p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.comparison .comparison-count { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-top: 6px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.comparison .comparison-count span { color: var(--muted); }
+.comparison .comparison-control, .comparison .source-link { display: inline-flex; align-items: center; justify-content: center; gap: 6px; box-sizing: border-box; min-height: 30px; padding: 5px 9px; border: 1px solid var(--line); border-radius: 8px; font: inherit; font-size: 12px; font-weight: 500; line-height: 18px; text-decoration: none; white-space: nowrap; cursor: pointer; transition: background-color .12s, border-color .12s; }
+.comparison .comparison-control { flex-shrink: 0; background: var(--surface); color: var(--ink); }
+.comparison .source-link { min-height: 28px; padding: 3px 7px; margin: -3px -7px; border-color: transparent; color: var(--accent); background: transparent; }
+.comparison :is(.comparison-control, .source-link):hover:not(:disabled) { background: var(--hover); border-color: var(--line); }
+.comparison .comparison-control:disabled { opacity: .55; cursor: wait; }
+.comparison :is(button, a, summary, .table-wrap):focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.comparison .table-wrap { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; border: 1px solid var(--line); border-radius: 10px; scrollbar-width: thin; scrollbar-color: var(--muted) var(--surface); }
+.comparison table { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 13px; line-height: 1.55; }
+/* The caption remains available to assistive technology without scrolling its text away. */
+.comparison caption { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.comparison :is(th, td) { text-align: left; vertical-align: top; padding: 15px 14px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; white-space: pre-wrap; }
+.comparison thead th { padding-top: 11px; padding-bottom: 11px; background: var(--tint); color: var(--muted); font-size: 11px; font-weight: 500; }
+.comparison tbody th { color: var(--ink); font-weight: 600; }
+.comparison td { color: var(--ink); }
+.comparison tbody tr:last-child > * { border-bottom: 0; }
+.comparison tbody tr:hover > * { background: var(--tint); }
+.comparison .item-name { position: sticky; left: 0; z-index: 1; background: var(--surface); box-shadow: 1px 0 var(--line); }
+.comparison thead .item-name { z-index: 2; background: var(--tint); }
+.comparison .numeric { text-align: right; font-variant-numeric: tabular-nums lining-nums; }
+.comparison .amount { white-space: nowrap; overflow-wrap: normal; font-variant-numeric: tabular-nums lining-nums; }
+.comparison .missing { color: var(--muted); }
+.comparison ul { list-style: none; margin: 0; padding: 0; }
+.comparison li + li { margin-top: 8px; }
+.comparison footer { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; margin-top: 16px; }
+.comparison .sync-status { font-size: 11px; }
+.comparison .sync-status::before { content: ""; display: inline-block; width: 5px; height: 5px; margin: 0 6px 2px 0; border-radius: 50%; background: var(--muted); }
+.comparison .sync-error { color: var(--error); }
+.comparison details { color: var(--muted); font-size: 11px; }
+.comparison summary { cursor: pointer; border-radius: 4px; width: fit-content; }
+.comparison summary:hover { color: var(--ink); }
+.comparison details[open] { flex-basis: 100%; }
+.comparison details p { margin-top: 8px; font-size: 12px; }
+.comparison .dev-details { margin-top: 10px; }
+.comparison .dev-details small { display: block; margin-top: 8px; font: 10px/1.6 ui-monospace, monospace; overflow-wrap: anywhere; }
+.comparison .empty, .comparison .state-message { padding: 28px 20px; border: 1px solid var(--line); border-radius: 10px; background: var(--tint); }
+.comparison .state-title { margin-bottom: 4px; color: var(--ink); font-weight: 600; }
+.comparison .empty button { margin-top: 16px; }
+.comparison [role="alert"] { color: var(--error); }
+.comparison .empty [role="alert"] { margin-top: 12px; }
+.comparison.expanded { padding-bottom: 88px; }
+@media (max-width: 600px) { .comparison { padding: 20px 16px; } .comparison header { gap: 12px; margin-bottom: 20px; } .comparison h1 { font-size: 18px; } }
+@container (max-width: 370px) { .comparison .item-name { position: static; } }
+@media (prefers-reduced-motion: reduce) { .comparison :is(button, a) { transition: none; } }

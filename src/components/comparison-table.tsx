@@ -1,6 +1,7 @@
 import "@/index.css";
 import { useDisplayMode, useSendFollowUpMessage, useUser } from "skybridge/web";
 import { useEffect, useState } from "react";
+import { ArrowUpRight, Maximize2, Minimize2 } from "lucide-react";
 import { useCallTool, useToolInfo } from "../helpers.js";
 import type { StoredComparison } from "../comparison-store.js";
 import { readComparisonResult } from "../comparison-result.js";
@@ -9,14 +10,20 @@ function traceWidget(event: string, details: Record<string, unknown>) {
   if (import.meta.env.DEV) console.info("[comparison-widget]", JSON.stringify({ time: new Date().toISOString(), event, ...details }));
 }
 
+// Display-only classification; supplied values are never reformatted.
+function isAmount(value: string) {
+  return /^(?:(?:[A-Z]{3}|[$€£¥])\s*)?[−+-]?\d[\d\s.,'’]*(?:\s*(?:%|[A-Za-zµμ°²³/]+))?$/u.test(value.trim());
+}
+
 function DevIndicator({ widgetId, comparisonId, revision, detail }: { widgetId: string; comparisonId?: string; revision?: number; detail: string }) {
   if (!import.meta.env.DEV) return null;
-  return <small style={{ display: "block", font: "11px monospace", overflowWrap: "anywhere", padding: "4px 0" }}>
+  return <details className="dev-details"><summary>Development details</summary><small>
     DEV widget {widgetId} | comparison {comparisonId ?? "pending"} | revision {revision ?? "pending"} | {detail}
-  </small>;
+  </small></details>;
 }
 
 export default function ComparisonView() {
+  const { theme } = useUser();
   const { output, input, isPending } = useToolInfo<"show-comparison">();
   const [widgetId] = useState(() => crypto.randomUUID());
   const [loadingTimedOut, setLoadingTimedOut] = useState(false);
@@ -32,12 +39,13 @@ export default function ComparisonView() {
     }, 30000);
     return () => clearTimeout(timer);
   }, [widgetId, result.status]);
-  if (result.status !== "ready") return <div>
-    <DevIndicator widgetId={widgetId} comparisonId={input?.comparisonId} detail={result.status} />
+  if (result.status !== "ready") return <section className={`comparison comparison-state ${theme === "dark" ? "dark" : ""}`} aria-label="Comparison">
+    <div className="state-message">
     {result.status === "error" ? <p role="alert">Could not load comparison: {result.error}</p>
       : loadingTimedOut ? <p role="alert">Loading comparison failed: no valid data arrived within 30 seconds. Ask in chat to reopen it.</p>
       : <p role="status">Loading comparison…</p>}
-  </div>;
+    </div><DevIndicator widgetId={widgetId} comparisonId={input?.comparisonId} detail={result.status} />
+  </section>;
   return <LiveComparison key={result.value.comparisonId} widgetId={widgetId} initial={result.value} />;
 }
 
@@ -99,31 +107,35 @@ function LiveComparison({ initial, widgetId }: { initial: StoredComparison; widg
     }
   }
   const comparison = latest.comparison;
+  const numericColumns = new Set(comparison.attributes.filter((attribute) => {
+    const values = comparison.items.map((item) => item.values[attribute.id]).filter((value) => value?.trim());
+    return values.length > 0 && values.every(isAmount);
+  }).map((attribute) => attribute.id));
   return (
     <section className={`comparison ${theme === "dark" ? "dark" : ""} ${mode === "fullscreen" ? "expanded" : ""}`} aria-label={comparison.title}>
-      <DevIndicator widgetId={widgetId} comparisonId={latest.comparisonId} revision={latest.revision} detail={refreshInfo} />
       <header>
-        <div><p className="eyebrow">COMPARE AT A GLANCE</p><h1>{comparison.title}</h1><p>{comparison.items.length} items · {comparison.attributes.length} attributes</p></div>
-        <button onClick={() => { void setMode(mode === "fullscreen" ? "inline" : "fullscreen").catch(() => {}); }}>{mode === "fullscreen" ? "Collapse" : "Expand"}</button>
+        <div className="comparison-heading"><h1>{comparison.title}</h1><p className="comparison-count">{comparison.items.length} {comparison.items.length === 1 ? "item" : "items"}<span aria-hidden="true">·</span>{comparison.attributes.length} attributes</p></div>
+        <button className="comparison-control" onClick={() => { void setMode(mode === "fullscreen" ? "inline" : "fullscreen").catch(() => {}); }}>{mode === "fullscreen" ? <Minimize2 size={13} aria-hidden="true" /> : <Maximize2 size={13} aria-hidden="true" />}{mode === "fullscreen" ? "Collapse" : "Expand"}</button>
       </header>
       {comparison.items.length === 0 ? <div className="empty">
-        <p>No items yet. Describe what you want to compare in chat.</p>
-        {comparison.attributes.length === 0 && <button disabled={loadingExample} onClick={() => { void loadExample(); }}>{loadingExample ? "Requesting example..." : "Load example"}</button>}
+        <p className="state-title">No items yet</p><p>Describe what you want to compare in chat.</p>
+        {comparison.attributes.length === 0 && <button className="comparison-control" disabled={loadingExample} onClick={() => { void loadExample(); }}>{loadingExample ? "Requesting example..." : "Load example"}</button>}
         {exampleError && <p role="alert">Could not send the request. Ask in chat to load an example.</p>}
       </div> : (
-        <div className="table-wrap">
-          <table>
+        <div className="table-wrap" role="region" aria-label="Comparison table, scroll horizontally for more attributes" tabIndex={0}>
+          <table style={{ minWidth: `${190 + comparison.attributes.length * 116 + 132}px` }}>
             <caption>Compare items by attribute. A dash means no value was supplied.</caption>
-            <thead><tr><th scope="col">Item</th>{comparison.attributes.map((a) => <th scope="col" key={a.id}>{a.label}</th>)}<th scope="col">Sources</th></tr></thead>
+            <colgroup><col style={{ width: 190 }} />{comparison.attributes.map((a) => <col key={a.id} />)}<col style={{ width: 132 }} /></colgroup>
+            <thead><tr><th scope="col" className="item-name">Item</th>{comparison.attributes.map((a) => <th scope="col" className={numericColumns.has(a.id) ? "numeric" : undefined} key={a.id}>{a.label}</th>)}<th scope="col">Sources</th></tr></thead>
             <tbody>{comparison.items.map((item) => <tr key={item.id}>
-              <th scope="row">{item.name}</th>
-              {comparison.attributes.map((a) => <td key={a.id}>{item.values[a.id] || <span aria-label="Not provided">—</span>}</td>)}
-              <td>{item.sources.length ? <ul>{item.sources.map((source, i) => <li key={i}><a href={source.url} target="_blank" rel="noopener noreferrer">{source.label}</a></li>)}</ul> : <span aria-label="No sources provided">—</span>}</td>
+              <th scope="row" className="item-name">{item.name}</th>
+              {comparison.attributes.map((a) => <td key={a.id} className={numericColumns.has(a.id) ? "numeric" : undefined}>{item.values[a.id]?.trim() ? <span className={isAmount(item.values[a.id]) ? "amount" : undefined}>{item.values[a.id]}</span> : <span className="missing" aria-label="Not provided">—</span>}</td>)}
+              <td className="sources">{item.sources.length ? <ul>{item.sources.map((source, i) => <li key={i}><a className="source-link" href={source.url} target="_blank" rel="noopener noreferrer" title={source.label} aria-label={`View source: ${source.label} for ${item.name}`}>View source<ArrowUpRight size={13} aria-hidden="true" /></a></li>)}</ul> : <span className="missing" aria-label="No sources provided">—</span>}</td>
             </tr>)}</tbody>
           </table>
         </div>
       )}
-      <footer><p role="status">{syncError ? "Updates unavailable. Showing the last received version; retrying automatically. The comparison may have expired or the server restarted." : `Live comparison · revision ${latest.revision}`}</p><p>Ask in chat to add, update or remove an item, rename the comparison, or change its attributes. Advice questions leave the table unchanged.</p><p>Changes sync while this widget is running. Storage is temporary and lost on server restart. Sample values are fictional; source links are supplied references, not verified by this app.</p></footer>
+      <footer><p role="status" className={syncError ? "sync-status sync-error" : "sync-status"}>{syncError ? "Updates unavailable. Showing the last received version; retrying automatically. The comparison may have expired or the server restarted." : `Live comparison · revision ${latest.revision}`}</p><details className="comparison-about"><summary>About this comparison</summary><p>Ask in chat to add, update or remove an item, rename the comparison, or change its attributes. Advice questions leave the table unchanged.</p><p>Changes sync while this widget is running. Storage is temporary and lost on server restart. Sample values are fictional; source links are supplied references, not verified by this app.</p><DevIndicator widgetId={widgetId} comparisonId={latest.comparisonId} revision={latest.revision} detail={refreshInfo} /></details></footer>
     </section>
   );
 }
