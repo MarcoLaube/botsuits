@@ -65,3 +65,7 @@ body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMac
 @media (max-width: 600px) { .comparison { padding: 20px 16px; } .comparison header { gap: 12px; margin-bottom: 20px; } .comparison h1 { font-size: 18px; } }
 @container (max-width: 370px) { .comparison .item-name { position: static; } }
 @media (prefers-reduced-motion: reduce) { .comparison :is(button, a) { transition: none; } }
+.comparison .view-select { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; color: var(--muted); font-size: 12px; }
+.comparison .view-select select { max-width: 100%; min-width: 0; min-height: 30px; padding: 4px 24px 4px 8px; border: 1px solid var(--line); border-radius: 8px; background-color: var(--surface); color: var(--ink); font: inherit; cursor: pointer; }
+.comparison select:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.comparison .transposed .product-heading { color: var(--ink); font-size: 13px; font-weight: 600; }

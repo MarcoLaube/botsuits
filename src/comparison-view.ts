@@ -1,5 +1,10 @@
 import type { Comparison } from "./comparison.js";
 
+export type LayoutPreference = "auto" | "columns" | "rows";
+export function itemsAsColumns(comparison: Comparison, layout: LayoutPreference) {
+  return layout === "columns" || (layout === "auto" && comparison.items.length < comparison.attributes.length);
+}
+
 export type SortColumn = { kind: "name" } | { kind: "attribute"; id: string };
 export type ViewSort = { column: SortColumn; direction: "ascending" | "descending" };
 

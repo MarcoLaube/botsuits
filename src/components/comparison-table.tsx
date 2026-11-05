@@ -5,7 +5,7 @@ import { ArrowUpRight, Maximize2, Minimize2 } from "lucide-react";
 import { useCallTool, useToolInfo } from "../helpers.js";
 import type { StoredComparison } from "../comparison-store.js";
 import { readComparisonResult } from "../comparison-result.js";
-import { availableSort, sameColumn, selectVisibleItems, type SortColumn, type ViewSort } from "../comparison-view.js";
+import { itemsAsColumns, type LayoutPreference, availableSort, sameColumn, selectVisibleItems, type SortColumn, type ViewSort } from "../comparison-view.js";
 
 function traceWidget(event: string, details: Record<string, unknown>) {
   if (import.meta.env.DEV) console.info("[comparison-widget]", JSON.stringify({ time: new Date().toISOString(), event, ...details }));
@@ -51,6 +51,7 @@ export default function ComparisonView() {
 }
 
 function LiveComparison({ initial, widgetId }: { initial: StoredComparison; widgetId: string }) {
+  const [layout, setLayout] = useState<LayoutPreference>("auto");
   const [filter, setFilter] = useState("");
   const [sort, setSort] = useState<ViewSort | null>(null);
   const [latest, setLatest] = useState(initial);
@@ -111,6 +112,7 @@ function LiveComparison({ initial, widgetId }: { initial: StoredComparison; widg
     }
   }
   const comparison = latest.comparison;
+  const transposed = itemsAsColumns(comparison, layout);
   const activeSort = availableSort(comparison, sort);
   const visibleItems = selectVisibleItems(comparison, filter, activeSort);
   const filtering = filter.trim().length > 0;
@@ -133,19 +135,33 @@ function LiveComparison({ initial, widgetId }: { initial: StoredComparison; widg
         <div className="comparison-heading"><h1>{comparison.title}</h1><p className="comparison-count"><span role="status">{filtering ? `${visibleItems.length} of ${comparison.items.length} items` : `${comparison.items.length} ${comparison.items.length === 1 ? "item" : "items"}`}</span><span aria-hidden="true">·</span>{comparison.attributes.length} attributes</p></div>
         <button className="comparison-control" onClick={() => { void setMode(mode === "fullscreen" ? "inline" : "fullscreen").catch(() => {}); }}>{mode === "fullscreen" ? <Minimize2 size={13} aria-hidden="true" /> : <Maximize2 size={13} aria-hidden="true" />}{mode === "fullscreen" ? "Collapse" : "Expand"}</button>
       </header>
-      {comparison.items.length > 0 && <div className="view-controls">
+      <div className="view-controls">
+        <label className="view-select">Layout<select value={layout} onChange={(event) => setLayout(event.target.value as LayoutPreference)}>
+          <option value="auto">Auto</option><option value="columns">Items as columns</option><option value="rows">Items as rows</option>
+        </select></label>
         <div className="filter-control"><input type="search" aria-label="Filter items" placeholder="Filter items" value={filter} onChange={(event) => setFilter(event.target.value)} />
           {filter && <button type="button" className="comparison-control" onClick={() => setFilter("")}>Clear</button>}
         </div>
         <button type="button" className="comparison-control" disabled={!filter && !activeSort} onClick={resetView}>Reset view</button>
-      </div>}
+        {transposed && <label className="view-select">Sort items<select value={activeSort ? JSON.stringify(activeSort) : ""} onChange={(event) => setSort(event.target.value ? JSON.parse(event.target.value) as ViewSort : null)}>
+          <option value="">Original order</option>
+          {[{ column: { kind: "name" } as SortColumn, label: "Item name" }, ...comparison.attributes.map((a) => ({ column: { kind: "attribute", id: a.id } as SortColumn, label: a.label }))].map(({ column, label }) => (["ascending", "descending"] as const).map((direction) => <option key={JSON.stringify({ column, direction })} value={JSON.stringify({ column, direction })}>{label} {direction === "ascending" ? "↑" : "↓"}</option>))}
+        </select></label>}
+      </div>
       {comparison.items.length === 0 ? <div className="empty">
         <p className="state-title">No items yet</p><p>Describe what you want to compare in chat.</p>
         {comparison.attributes.length === 0 && <button className="comparison-control" disabled={loadingExample} onClick={() => { void loadExample(); }}>{loadingExample ? "Requesting example..." : "Load example"}</button>}
         {exampleError && <p role="alert">Could not send the request. Ask in chat to load an example.</p>}
       </div> : (
-        <div className="table-wrap" role="region" aria-label="Comparison table, scroll horizontally for more attributes" tabIndex={0}>
-          <table style={{ minWidth: `${190 + comparison.attributes.length * 116 + 132}px` }}>
+        <div className="table-wrap" role="region" aria-label="Comparison table, scroll horizontally for more columns" tabIndex={0}>
+          {transposed ? <table className="transposed" style={{ minWidth: `${190 + visibleItems.length * 160}px` }}>
+            <caption>Items are columns, attributes are rows. Sort items using the Sort items control. A dash means no value was supplied.</caption>
+            <colgroup><col style={{ width: 190 }} />{visibleItems.map((item) => <col key={item.id} />)}</colgroup>
+            <thead><tr><th scope="col" className="item-name">Attribute</th>{visibleItems.map((item) => <th scope="col" className="product-heading" key={item.id}>{item.name}</th>)}</tr></thead>
+            <tbody>{comparison.attributes.map((a) => <tr key={a.id}><th scope="row" className="item-name">{a.label}</th>{visibleItems.map((item) => <td key={item.id} className={numericColumns.has(a.id) ? "numeric" : undefined}>{item.values[a.id]?.trim() ? <span className={isAmount(item.values[a.id]) ? "amount" : undefined}>{item.values[a.id]}</span> : <span className="missing" aria-label="Not provided">—</span>}</td>)}</tr>)}
+              <tr><th scope="row" className="item-name">Sources</th>{visibleItems.map((item) => <td className="sources" key={item.id}>{item.sources.length ? <ul>{item.sources.map((source, i) => <li key={i}><a className="source-link" href={source.url} target="_blank" rel="noopener noreferrer" title={source.label} aria-label={`View source: ${source.label} for ${item.name}`}>View source<ArrowUpRight size={13} aria-hidden="true" /></a></li>)}</ul> : <span className="missing" aria-label="No sources provided">—</span>}</td>)}</tr>
+            </tbody>
+          </table> : <table style={{ minWidth: `${190 + comparison.attributes.length * 116 + 132}px` }}>
             <caption>Compare items by attribute. A dash means no value was supplied.</caption>
             <colgroup><col style={{ width: 190 }} />{comparison.attributes.map((a) => <col key={a.id} />)}<col style={{ width: 132 }} /></colgroup>
             <thead><tr><th scope="col" className="item-name" aria-sort={activeSort?.column.kind === "name" ? activeSort.direction : undefined}>{sortHeader({ kind: "name" }, "Item")}</th>{comparison.attributes.map((a) => <th scope="col" className={numericColumns.has(a.id) ? "numeric" : undefined} key={a.id} aria-sort={activeSort?.column.kind === "attribute" && activeSort.column.id === a.id ? activeSort.direction : undefined}>{sortHeader({ kind: "attribute", id: a.id }, a.label)}</th>)}<th scope="col">Sources</th></tr></thead>
@@ -154,7 +170,7 @@ function LiveComparison({ initial, widgetId }: { initial: StoredComparison; widg
               {comparison.attributes.map((a) => <td key={a.id} className={numericColumns.has(a.id) ? "numeric" : undefined}>{item.values[a.id]?.trim() ? <span className={isAmount(item.values[a.id]) ? "amount" : undefined}>{item.values[a.id]}</span> : <span className="missing" aria-label="Not provided">—</span>}</td>)}
               <td className="sources">{item.sources.length ? <ul>{item.sources.map((source, i) => <li key={i}><a className="source-link" href={source.url} target="_blank" rel="noopener noreferrer" title={source.label} aria-label={`View source: ${source.label} for ${item.name}`}>View source<ArrowUpRight size={13} aria-hidden="true" /></a></li>)}</ul> : <span className="missing" aria-label="No sources provided">—</span>}</td>
             </tr>)}</tbody>
-          </table>
+          </table>}
         </div>
       )}
       {comparison.items.length > 0 && visibleItems.length === 0 && <div className="filter-empty" role="status"><p className="state-title">No items match your filter</p><button type="button" className="comparison-control" onClick={() => setFilter("")}>Clear filter</button></div>}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { availableSort, sameColumn, selectVisibleItems, type ViewSort } from "../src/comparison-view.js";
+import { itemsAsColumns, availableSort, sameColumn, selectVisibleItems, type ViewSort } from "../src/comparison-view.js";
 import type { Comparison } from "../src/comparison.js";
 
 const comparison: Comparison = {
@@ -16,6 +16,30 @@ const desc: ViewSort = { ...asc, direction: "descending" };
 const ids = (data: Comparison, query = "", sort: ViewSort | null = null) => selectVisibleItems(data, query, sort).map((item) => item.id);
 
 describe("local comparison view preferences", () => {
+  it("chooses Auto from full dimensions, including ties, and recalculates after edits", () => {
+    const players = (count: number, stats: number): Comparison => ({ ...comparison,
+      items: Array.from({ length: count }, (_, i) => ({ ...comparison.items[i % 3], id: String(i) })),
+      attributes: Array.from({ length: stats }, (_, i) => ({ id: String(i), label: `Statistic ${i}` })),
+    });
+    expect(itemsAsColumns(players(2, 10), "auto")).toBe(true);
+    expect(itemsAsColumns(players(10, 2), "auto")).toBe(false);
+    expect(itemsAsColumns(players(2, 2), "auto")).toBe(false);
+    expect(itemsAsColumns(players(1, 2), "auto")).toBe(true);
+    expect(itemsAsColumns(players(2, 1), "auto")).toBe(false);
+    expect(itemsAsColumns(players(1, 10), "rows")).toBe(false);
+    expect(itemsAsColumns(players(10, 1), "columns")).toBe(true);
+  });
+  it("uses the same visible item order in either layout without filtering changing Auto", () => {
+    const visible = selectVisibleItems(comparison, "daily", asc);
+    expect(visible.map((item) => item.id)).toEqual(["low", "high"]);
+    for (const layout of ["auto", "rows", "columns"] as const) {
+      itemsAsColumns(comparison, layout);
+      expect(selectVisibleItems(comparison, "daily", asc)).toEqual(visible);
+    }
+    expect(itemsAsColumns(comparison, "auto")).toBe(false);
+    expect(selectVisibleItems(comparison, "metro", asc)).toHaveLength(1);
+    expect(itemsAsColumns(comparison, "auto")).toBe(false);
+  });
   it("sorts grouped currency numerically with missing values last in BOTH directions without mutating rows", () => {
     const before = structuredClone(comparison);
     expect(ids(comparison, "", asc)).toEqual(["low", "high", "missing"]);
